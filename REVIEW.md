@@ -16,6 +16,8 @@
 - O chat acompanha mensagens novas automaticamente.
 - Campos em celulares usam tamanho e dicas de teclado apropriados, evitando zoom involuntário no iOS.
 - O botão do dono informa que irá **Encerrar** a sala.
+- Um painel de voz compacto mostra o estado da conexão, o usuário atual e controles rápidos de microfone e áudio.
+- Configurações de voz permitem escolher entrada, saída e volume; as preferências ficam salvas no navegador.
 
 ## Compartilhamento de tela e áudio
 

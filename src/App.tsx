@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
-import { Check, Copy, Expand, Link2, Lock, LogOut, MessageSquare, Mic, MicOff, MonitorOff, MonitorUp, PanelRightClose, PanelRightOpen, Radio, Send, ShieldCheck, Signal, Unlock, UserMinus, Users, Volume2 } from 'lucide-react'
+import { Check, Copy, Expand, Headphones, Link2, Lock, LogOut, MessageSquare, Mic, MicOff, MonitorOff, MonitorUp, PanelRightClose, PanelRightOpen, Radio, Send, Settings, ShieldCheck, Signal, Unlock, UserMinus, Users, Volume2, VolumeX } from 'lucide-react'
 import { Room, RoomEvent, Track, VideoPreset } from 'livekit-client'
 
 type Member = { id: string; name: string; local: boolean; role: 'owner' | 'member' }
@@ -41,6 +41,12 @@ export default function App() {
   const [qualityPreset, setQualityPreset] = useState<QualityPreset>('balanced')
   const [recentRooms, setRecentRooms] = useState(loadRecent)
   const [role, setRole] = useState<'owner' | 'member'>('member')
+  const [audioSettingsOpen, setAudioSettingsOpen] = useState(false)
+  const [deafened, setDeafened] = useState(false)
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([])
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([])
+  const [inputDevice, setInputDevice] = useState(localStorage.getItem('screenly-input-device') || 'default')
+  const [outputDevice, setOutputDevice] = useState(localStorage.getItem('screenly-output-device') || 'default')
   const [connecting, setConnecting] = useState(false)
   const [sharingBusy, setSharingBusy] = useState(false)
   const [sending, setSending] = useState(false)
@@ -52,10 +58,19 @@ export default function App() {
   const audioElements = useRef(new Map<string, HTMLMediaElement>())
   const audioRoot = useRef<HTMLDivElement>(null)
   const chatEnd = useRef<HTMLDivElement>(null)
+  const previousVolume = useRef(100)
+  const volumeRef = useRef(100)
   const stage = useRef<HTMLElement>(null)
 
   useEffect(() => () => { room.current?.disconnect() }, [])
-  useEffect(() => { audioElements.current.forEach(element => { element.volume = volume / 100 }) }, [volume])
+  useEffect(() => { volumeRef.current = volume; audioElements.current.forEach(element => { element.volume = volume / 100 }) }, [volume])
+  useEffect(() => {
+    if (!joinedRoom) return
+    const refresh = () => loadAudioDevices()
+    navigator.mediaDevices?.addEventListener('devicechange', refresh)
+    loadAudioDevices()
+    return () => navigator.mediaDevices?.removeEventListener('devicechange', refresh)
+  }, [joinedRoom])
   useEffect(() => {
     if (!joinedRoom || !audioRoot.current) return
     audioTracks.current.forEach((track, id) => attachAudio(track, id))
@@ -72,7 +87,7 @@ export default function App() {
     if (audioElements.current.has(id) || !audioRoot.current) return
     audioTracks.current.set(id, track)
     const element = track.attach()
-    element.autoplay = true; element.volume = volume / 100
+    element.autoplay = true; element.volume = volumeRef.current / 100
     audioRoot.current.appendChild(element); audioElements.current.set(id, element)
     element.play().then(() => setAudioBlocked(false)).catch(() => setAudioBlocked(true))
   }
@@ -178,6 +193,8 @@ export default function App() {
       if (room.current === nextRoom) resetRoom('A sala foi encerrada')
     })
     await nextRoom.connect(credentials.server_url, credentials.participant_token)
+    if (inputDevice !== 'default') await nextRoom.switchActiveDevice('audioinput', inputDevice).catch(() => false)
+    if (outputDevice !== 'default') await nextRoom.switchActiveDevice('audiooutput', outputDevice).catch(() => false)
     try { const metadata = JSON.parse(nextRoom.metadata || '{}'); setLocked(Boolean(metadata.locked)) } catch { /* sala nova */ }
     localStorage.setItem('screenly-name', cleanName)
     const recent = [code, ...loadRecent().filter(item => item !== code)].slice(0, 5)
@@ -223,8 +240,51 @@ export default function App() {
 
   async function toggleMic() {
     if (!room.current) return
-    try { await room.current.localParticipant.setMicrophoneEnabled(!micEnabled); setMicEnabled(value => !value) }
+    try {
+      if (!micEnabled && deafened) { setDeafened(false); setVolume(previousVolume.current || 100) }
+      await room.current.localParticipant.setMicrophoneEnabled(!micEnabled); setMicEnabled(value => !value)
+      await loadAudioDevices()
+    }
     catch { setStatus('Não foi possível acessar o microfone') }
+  }
+
+  async function loadAudioDevices() {
+    if (!navigator.mediaDevices?.enumerateDevices) return
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      setAudioInputs(devices.filter(device => device.kind === 'audioinput'))
+      setAudioOutputs(devices.filter(device => device.kind === 'audiooutput'))
+    } catch { /* navegador sem enumeração de dispositivos */ }
+  }
+
+  async function changeAudioDevice(kind: 'audioinput' | 'audiooutput', deviceId: string) {
+    if (!room.current) return
+    try {
+      const changed = await room.current.switchActiveDevice(kind, deviceId)
+      if (!changed) throw new Error()
+      if (kind === 'audioinput') { setInputDevice(deviceId); localStorage.setItem('screenly-input-device', deviceId) }
+      else { setOutputDevice(deviceId); localStorage.setItem('screenly-output-device', deviceId) }
+      setStatus(kind === 'audioinput' ? 'Microfone alterado' : 'Saída de áudio alterada')
+    } catch { setStatus('Este navegador não conseguiu trocar o dispositivo') }
+  }
+
+  async function toggleDeafen() {
+    if (!deafened) {
+      previousVolume.current = volume || 100
+      setVolume(0); setDeafened(true)
+      if (micEnabled && room.current) {
+        await room.current.localParticipant.setMicrophoneEnabled(false).catch(() => {})
+        setMicEnabled(false)
+      }
+    } else {
+      setVolume(previousVolume.current || 100); setDeafened(false)
+    }
+  }
+
+  function changeVolume(nextVolume: number) {
+    setVolume(nextVolume)
+    if (nextVolume > 0) { previousVolume.current = nextVolume; setDeafened(false) }
+    else setDeafened(true)
   }
 
   async function sendChat(event: FormEvent) {
@@ -252,7 +312,7 @@ export default function App() {
     room.current = null
     audioElements.current.forEach(element => element.remove()); audioElements.current.clear(); audioTracks.current.clear()
     sharingRef.current = false; controlToken.current = ''
-    setInviteRoom(''); setJoinedRoom(''); setMembers([]); setSharing(false); setPresentations([]); setMicEnabled(false); setChat([]); setRole('member'); setReconnecting(false); setStatus(message)
+    setInviteRoom(''); setJoinedRoom(''); setMembers([]); setSharing(false); setPresentations([]); setMicEnabled(false); setChat([]); setRole('member'); setReconnecting(false); setAudioSettingsOpen(false); setDeafened(false); setStatus(message)
     history.replaceState(null, '', location.pathname)
   }
 
@@ -275,12 +335,17 @@ export default function App() {
 
   const presentingIds = new Set(presentations.map(item => item.id))
   const qualityLabel = reconnecting ? 'Reconectando' : connectionQuality === 'excellent' ? 'Excelente' : connectionQuality === 'good' ? 'Boa' : connectionQuality === 'poor' ? 'Instável' : connectionQuality === 'lost' ? 'Sem conexão' : 'Conectando'
+  const voicePanel = <div className="voice-area">
+    <div className="voice-connection"><div><span className="voice-signal"><Signal/> Voz conectada</span><small>{qualityLabel} · {members.length} na chamada</small></div><button title="Sair da chamada" onClick={leaveRoom}><LogOut/></button></div>
+    <div className="voice-user"><div className="voice-avatar">{name.trim().charAt(0).toUpperCase()}</div><div className="voice-identity"><strong>{name}</strong><small>{micEnabled?'Microfone ativo':deafened?'Áudio desativado':'Microfone fechado'}</small></div><button className={micEnabled?'voice-control active':'voice-control muted'} aria-pressed={micEnabled} title={micEnabled?'Desativar microfone':'Ativar microfone'} onClick={toggleMic}>{micEnabled?<Mic/>:<MicOff/>}</button><button className={deafened?'voice-control muted':'voice-control'} aria-pressed={deafened} title={deafened?'Ativar áudio':'Desativar áudio'} onClick={toggleDeafen}>{deafened?<VolumeX/>:<Headphones/>}</button><button className={audioSettingsOpen?'voice-control active':'voice-control'} title="Configurações de voz" onClick={()=>{setAudioSettingsOpen(value=>!value);loadAudioDevices()}}><Settings/></button></div>
+    {audioSettingsOpen&&<div className="audio-settings" role="dialog" aria-label="Configurações de voz"><header><div><strong>Configurações de voz</strong><small>Entrada, saída e volume</small></div><button aria-label="Fechar" onClick={()=>setAudioSettingsOpen(false)}>×</button></header><label>Dispositivo de entrada<select value={inputDevice} onChange={event=>changeAudioDevice('audioinput',event.target.value)}><option value="default">Padrão do sistema</option>{audioInputs.filter(device=>device.deviceId!=='default').map((device,index)=><option key={device.deviceId} value={device.deviceId}>{device.label||`Microfone ${index+1}`}</option>)}</select></label><label>Dispositivo de saída<select value={outputDevice} disabled={audioOutputs.length===0} onChange={event=>changeAudioDevice('audiooutput',event.target.value)}><option value="default">Padrão do sistema</option>{audioOutputs.filter(device=>device.deviceId!=='default').map((device,index)=><option key={device.deviceId} value={device.deviceId}>{device.label||`Saída ${index+1}`}</option>)}</select></label><label className="settings-volume"><span>Volume de saída <b>{volume}%</b></span><input type="range" min="0" max="100" value={volume} onChange={event=>changeVolume(Number(event.target.value))}/></label><div className="voice-hint"><ShieldCheck/> As preferências ficam salvas neste navegador.</div></div>}
+  </div>
   return <main className={`room ${panelOpen?'':'panel-closed'}`}>
     <header className="room-header"><Logo/><div className="room-title"><span>{locked?'Sala bloqueada':'Sala privada'}</span><strong>{joinedRoom}</strong></div><div className="room-header-actions"><div className={`quality quality-${connectionQuality}`}><Signal/><span>{qualityLabel}</span></div>{role==='owner'&&<button className="header-button" onClick={toggleLock}>{locked?<Unlock/>:<Lock/>}{locked?'Desbloquear':'Bloquear'}</button>}<button className="header-button" onClick={copyLink}><Link2/>{copied?'Link copiado':'Convidar'}</button><button className="header-button panel-toggle" onClick={()=>setPanelOpen(v=>!v)}>{panelOpen?<PanelRightClose/>:<PanelRightOpen/>}</button></div></header>
     {reconnecting&&<div className="reconnect-banner"><span className="reconnect-spinner"/> Reconectando automaticamente…</div>}
     <div className="room-body"><section className={`stage ${presentations.length?'multi-stage':''}`} ref={stage} onClick={()=>audioBlocked&&enableAudio()}><div ref={audioRoot} className="audio-root"/>{presentations.length===0&&<div className="empty-stage"><div className="empty-visual"><MonitorUp/></div><span>SALA PRONTA</span><h2>Compartilhe quando quiser</h2><p>Todos podem compartilhar telas ao mesmo tempo.</p><button className="main-button" disabled={sharingBusy} onClick={startSharing}><MonitorUp/> {sharingBusy?'Abrindo seletor…':'Compartilhar minha tela'}</button><label className="quality-select">Qualidade<select disabled={sharingBusy} value={qualityPreset} onChange={e=>setQualityPreset(e.target.value as QualityPreset)}>{Object.entries(qualitySettings).map(([key,value])=><option key={key} value={key}>{value.label}</option>)}</select></label></div>}{presentations.map(item=><ScreenTile key={item.id} presentation={item}/>)}{audioBlocked&&<button className="audio-overlay" onClick={enableAudio}><Volume2/> Clique para ativar o áudio</button>}</section>
       <aside className="participants-panel"><div className="panel-tabs"><button className={panelTab==='people'?'active':''} onClick={()=>setPanelTab('people')}><Users/> Pessoas <span>{members.length}</span></button><button className={panelTab==='chat'?'active':''} onClick={()=>setPanelTab('chat')}><MessageSquare/> Chat {chat.length>0&&<span>{chat.length}</span>}</button></div>{panelTab==='people'?<div className="members-list">{members.map(member=><div className={`member ${speakers.includes(member.id)?'speaking':''}`} key={member.id}><div className="avatar">{member.name.trim().charAt(0).toUpperCase()}</div><div><strong>{member.name}{member.role==='owner'&&<small className="owner-label"> Dono</small>}</strong><small>{member.local?'Você':speakers.includes(member.id)?'Falando…':'Conectado'}</small></div>{presentingIds.has(member.id)?<span className="presenting"><Radio/> Ao vivo</span>:<span className="online-dot"/>}{role==='owner'&&!member.local&&<div className="member-actions">{presentingIds.has(member.id)&&<button title="Parar apresentação" onClick={()=>moderate('stop-presenter',member.id)}><MonitorOff/></button>}<button title="Remover da sala" onClick={()=>moderate('kick',member.id)}><UserMinus/></button></div>}</div>)}</div>:<div className="chat-panel"><div className="chat-messages">{chat.length===0&&<div className="chat-empty"><MessageSquare/><span>A conversa começa aqui.</span></div>}{chat.map(message=><div className={`chat-message ${message.local?'mine':''}`} key={message.id}><strong>{message.local?'Você':message.sender}<time>{new Date(message.time).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</time></strong><p>{message.text}</p></div>)}<div ref={chatEnd}/></div><form className="chat-form" onSubmit={sendChat}><input enterKeyHint="send" disabled={sending} maxLength={1000} placeholder="Mensagem para a sala" value={chatText} onChange={e=>setChatText(e.target.value)}/><button aria-label="Enviar" disabled={sending||!chatText.trim()}><Send/></button></form></div>}<div className="panel-note"><ShieldCheck/><span>{locked?'Entrada de novos membros bloqueada':'Sala protegida por convite'}</span></div></aside></div>
-    <footer className="room-footer"><div className="room-status"><span className={presentations.length?'status active':'status'}/><span>{status}</span></div><div className="control-dock"><label className="volume-control"><Volume2/><input aria-label="Volume" type="range" min="0" max="100" value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label><button className={micEnabled?'enabled-control':''} onClick={toggleMic}>{micEnabled?<Mic/>:<MicOff/>}<span>{micEnabled?'Microfone':'Sem áudio'}</span></button><button onClick={copyLink}>{copied?<Check/>:<Copy/>}<span>{copied?'Copiado':'Convite'}</span></button>{!sharing&&<button className="primary-control" disabled={sharingBusy} onClick={startSharing}><MonitorUp/><span>{sharingBusy?'Aguarde':'Compartilhar'}</span></button>}{sharing&&<button className="danger-control" disabled={sharingBusy} onClick={stopSharing}><MonitorOff/><span>{sharingBusy?'Parando':'Parar'}</span></button>}<button onClick={toggleFullscreen}><Expand/><span>Tela cheia</span></button><button className="mobile-panel-control" onClick={()=>setPanelOpen(v=>!v)}><Users/><span>Pessoas</span></button><button className="leave-control" onClick={leaveRoom}><LogOut/><span>{role==='owner'?'Encerrar':'Sair'}</span></button></div><div className="footer-count"><Users/><span>{members.length} {members.length===1?'pessoa':'pessoas'}</span></div></footer>
+    <footer className="room-footer">{voicePanel}<div className="control-dock"><button className={`mobile-voice-control ${micEnabled?'enabled-control':''}`} onClick={toggleMic}>{micEnabled?<Mic/>:<MicOff/>}<span>{micEnabled?'Microfone':'Mudo'}</span></button><button className={`mobile-voice-control ${deafened?'danger-control':''}`} onClick={toggleDeafen}>{deafened?<VolumeX/>:<Headphones/>}<span>{deafened?'Sem som':'Áudio'}</span></button><button onClick={copyLink}>{copied?<Check/>:<Copy/>}<span>{copied?'Copiado':'Convite'}</span></button>{!sharing&&<button className="primary-control" disabled={sharingBusy} onClick={startSharing}><MonitorUp/><span>{sharingBusy?'Aguarde':'Compartilhar'}</span></button>}{sharing&&<button className="danger-control" disabled={sharingBusy} onClick={stopSharing}><MonitorOff/><span>{sharingBusy?'Parando':'Parar'}</span></button>}<button onClick={toggleFullscreen}><Expand/><span>Tela cheia</span></button><button className="mobile-panel-control" onClick={()=>setPanelOpen(v=>!v)}><Users/><span>Pessoas</span></button><button className="mobile-settings-control" onClick={()=>setAudioSettingsOpen(value=>!value)}><Settings/><span>Voz</span></button><button className="leave-control" onClick={leaveRoom}><LogOut/><span>{role==='owner'?'Encerrar':'Sair'}</span></button></div><div className="footer-count"><span className={presentations.length?'status active':'status'}/><span>{status}</span></div></footer>
   </main>
 }
 

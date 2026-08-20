@@ -9,6 +9,7 @@ Sala privada de voz, chat e compartilhamento de tela no navegador.
 - Criador da sala com controles de bloqueio, remoção e interrupção de apresentação.
 - Uma apresentação por vez, coordenada pelo backend.
 - Voz com indicador de quem está falando.
+- Painel de voz com microfone, silenciamento, volume e seleção de dispositivos de entrada e saída.
 - Chat em tempo real durante a sessão.
 - Compartilhamento simultâneo de tela por vários participantes em uma grade responsiva.
 - Compartilhamento de tela com áudio e três perfis de qualidade.
