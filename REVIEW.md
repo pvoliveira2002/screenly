@@ -23,6 +23,9 @@
 - A grade permite destacar ou ampliar uma apresentação específica.
 - O Screenly pode ser instalado como PWA e possui uma experiência básica offline para a interface.
 - O LiveKit e componentes da sala são carregados sob demanda, reduzindo o bundle inicial.
+- O modo econômico usa 540p/20 FPS por padrão, miniaturas 270p/12 FPS e até três telas simultâneas.
+- Salas vazias expiram em 60 segundos, chamadas inativas recebem aviso e apresentações individuais param após 60 minutos.
+- A interface mostra uma estimativa local de minutos-participante usados na sessão atual.
 
 ## Compartilhamento de tela e áudio
 

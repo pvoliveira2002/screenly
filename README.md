@@ -16,6 +16,8 @@ Sala privada de voz, chat e compartilhamento de tela no navegador.
 - Compartilhamento simultâneo de tela por vários participantes em uma grade responsiva.
 - Destaque e tela cheia individual para cada apresentação.
 - PWA instalável e LiveKit carregado somente ao entrar em uma sala.
+- Modo econômico com 540p/20 FPS padrão, até três apresentações e estimativa de minutos.
+- Aviso de inatividade, encerramento de salas vazias e limite de duração da apresentação.
 - Compartilhamento de tela com áudio e três perfis de qualidade.
 - Reconexão automática e indicador de qualidade.
 - Histórico local das cinco salas recentes.

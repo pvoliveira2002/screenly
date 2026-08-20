@@ -4,6 +4,8 @@ export const qualitySettings = {
   motion: { label: 'Movimento · 720p 60 FPS', resolution: { width: 1280, height: 720, frameRate: 60 }, maxBitrate: 3_000_000, contentHint: 'motion' as const },
 }
 
+export const MAX_SIMULTANEOUS_SCREENS = 3
+
 export const savedName = () => localStorage.getItem('screenly-name') || ''
 export const loadRecent = (): string[] => {
   try { return JSON.parse(localStorage.getItem('screenly-recent') || '[]') }

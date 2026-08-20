@@ -27,3 +27,13 @@ test('dependências diretas usam versões reproduzíveis', async () => {
     assert.doesNotMatch(version, /latest|^[~^]/)
   }
 })
+
+test('modo econômico mantém limites de consumo no código', async () => {
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  const constants = await readFile(new URL('../src/constants.ts', import.meta.url), 'utf8')
+  const roomApi = await readFile(new URL('../api/room.mjs', import.meta.url), 'utf8')
+  assert.match(app, /useState<QualityPreset>\('economy'\)/)
+  assert.match(constants, /MAX_SIMULTANEOUS_SCREENS = 3/)
+  assert.match(roomApi, /emptyTimeout: 60/)
+  assert.match(roomApi, /maxParticipants: 10/)
+})

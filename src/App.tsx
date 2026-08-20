@@ -1,7 +1,7 @@
 import { FormEvent, lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Check, Copy, Expand, Headphones, Link2, Lock, LogOut, Mic, MicOff, MonitorOff, MonitorUp, PanelRightClose, PanelRightOpen, Radio, Settings, ShieldCheck, Signal, Unlock, Users, Volume2, VolumeX } from 'lucide-react'
 import type { Room, Track } from 'livekit-client'
-import { loadRecent, qualitySettings, savedName } from './constants'
+import { loadRecent, MAX_SIMULTANEOUS_SCREENS, qualitySettings, savedName } from './constants'
 import type { ChatMessage, Credentials, Member, Presentation, QualityPreset } from './types'
 import InstallAppButton from './components/InstallAppButton'
 
@@ -31,7 +31,7 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   const [chat, setChat] = useState<ChatMessage[]>([])
   const [chatText, setChatText] = useState('')
-  const [qualityPreset, setQualityPreset] = useState<QualityPreset>('balanced')
+  const [qualityPreset, setQualityPreset] = useState<QualityPreset>('economy')
   const [recentRooms, setRecentRooms] = useState(loadRecent)
   const [role, setRole] = useState<'owner' | 'member'>('member')
   const [audioSettingsOpen, setAudioSettingsOpen] = useState(false)
@@ -48,8 +48,11 @@ export default function App() {
   const [micLevel, setMicLevel] = useState(0)
   const [micTesting, setMicTesting] = useState(false)
   const [pushToTalk, setPushToTalk] = useState(localStorage.getItem('screenly-push-to-talk') === 'true')
+  const [idleWarning, setIdleWarning] = useState(false)
+  const [usageSeconds, setUsageSeconds] = useState(0)
 
   const room = useRef<Room | null>(null)
+  const sessionToken = useRef('')
   const livekit = useRef<typeof import('livekit-client') | null>(null)
   const controlToken = useRef('')
   const sharingRef = useRef(false)
@@ -64,9 +67,37 @@ export default function App() {
   const micTestStream = useRef<MediaStream | null>(null)
   const micTestContext = useRef<AudioContext | null>(null)
   const micTestFrame = useRef(0)
+  const lastActivity = useRef(Date.now())
+  const screenLimitTimer = useRef(0)
   const stage = useRef<HTMLElement>(null)
 
   useEffect(() => () => { room.current?.disconnect() }, [])
+  useEffect(() => {
+    if (!joinedRoom) return
+    const active = () => { lastActivity.current = Date.now(); setIdleWarning(false) }
+    const events: (keyof WindowEventMap)[] = ['pointerdown', 'keydown', 'touchstart']
+    events.forEach(event => window.addEventListener(event, active, { passive: true }))
+    const idleTimer = window.setInterval(() => {
+      const idleMinutes = (Date.now() - lastActivity.current) / 60_000
+      if (idleMinutes >= 25) setIdleWarning(true)
+      if (idleMinutes >= 30 && (role !== 'owner' || members.length <= 1)) leaveRoom()
+    }, 30_000)
+    return () => { events.forEach(event => window.removeEventListener(event, active)); window.clearInterval(idleTimer) }
+  }, [joinedRoom, role, members.length])
+  useEffect(() => {
+    if (!joinedRoom) { setUsageSeconds(0); return }
+    const usageTimer = window.setInterval(() => setUsageSeconds(current => current + members.length * 10), 10_000)
+    return () => window.clearInterval(usageTimer)
+  }, [joinedRoom, members.length])
+  useEffect(() => {
+    if (!joinedRoom) return
+    const closeOnPageHide = () => {
+      if (role === 'owner' && controlToken.current) fetch('/api/moderate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'close', control_token: controlToken.current }), keepalive: true }).catch(() => {})
+      room.current?.disconnect()
+    }
+    window.addEventListener('pagehide', closeOnPageHide)
+    return () => window.removeEventListener('pagehide', closeOnPageHide)
+  }, [joinedRoom, role])
   useEffect(() => {
     volumeRef.current = volume
     audioElements.current.forEach((element, trackId) => {
@@ -205,7 +236,7 @@ export default function App() {
     livekit.current = livekitModule
     const { Room, RoomEvent, Track } = livekitModule
     const nextRoom = new Room({ adaptiveStream: true, dynacast: true })
-    room.current = nextRoom; controlToken.current = credentials.control_token || ''
+    room.current = nextRoom; sessionToken.current = credentials.session_token; controlToken.current = credentials.control_token || ''
     setRole(credentials.role)
     const parseRole = (metadata?: string): 'owner' | 'member' => { try { return JSON.parse(metadata || '{}').role === 'owner' ? 'owner' : 'member' } catch { return 'member' } }
     const updateMembers = () => setMembers([
@@ -234,6 +265,7 @@ export default function App() {
     })
     nextRoom.on(RoomEvent.LocalTrackUnpublished, publication => {
       if (publication.source !== Track.Source.ScreenShare || !sharingRef.current) return
+      window.clearTimeout(screenLimitTimer.current)
       clearPresentation(nextRoom.localParticipant.identity)
     })
     nextRoom.on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
@@ -260,14 +292,17 @@ export default function App() {
     localStorage.setItem('screenly-name', cleanName)
     const recent = [code, ...loadRecent().filter(item => item !== code)].slice(0, 5)
     localStorage.setItem('screenly-recent', JSON.stringify(recent)); setRecentRooms(recent)
+    lastActivity.current = Date.now()
     setJoinedRoom(code); updateMembers(); setStatus('Conectado. A sala está pronta.')
     history.replaceState(null, '', `?sala=${code}`)
   }
 
   async function startSharing() {
     if (!room.current || !livekit.current || sharingRef.current || sharingBusy) return
+    if (presentations.length >= MAX_SIMULTANEOUS_SCREENS) return setStatus(`Limite econômico de ${MAX_SIMULTANEOUS_SCREENS} telas simultâneas atingido`)
     setSharingBusy(true)
     try {
+      await api('/api/presenter', { action: 'acquire', session_token: sessionToken.current })
       const { Track, VideoPreset } = livekit.current
       const preset = qualitySettings[qualityPreset]
       await room.current.localParticipant.setScreenShareEnabled(
@@ -278,12 +313,16 @@ export default function App() {
           simulcast: true,
           degradationPreference: 'maintain-framerate',
           screenShareEncoding: { maxBitrate: preset.maxBitrate, maxFramerate: preset.resolution.frameRate },
-          screenShareSimulcastLayers: [new VideoPreset(640, 360, 400_000, 15)],
+          screenShareSimulcastLayers: [new VideoPreset(480, 270, 240_000, 12)],
         },
       )
       const publication = room.current.localParticipant.getTrackPublication(Track.Source.ScreenShare)
       if (publication?.track) showVideo(room.current.localParticipant.identity, name || 'Você', publication.track, true)
       sharingRef.current = true; setSharing(true)
+      window.clearTimeout(screenLimitTimer.current)
+      screenLimitTimer.current = window.setTimeout(() => {
+        if (sharingRef.current) { stopSharing(); setStatus('Apresentação encerrada após 60 minutos para economizar a franquia') }
+      }, 60 * 60_000)
       const hasAudio = Boolean(room.current.localParticipant.getTrackPublication(Track.Source.ScreenShareAudio))
       setStatus(hasAudio ? 'Você está compartilhando tela e áudio' : 'Tela compartilhada sem áudio da aba')
     } catch (error) { setStatus(error instanceof Error ? error.message : 'Compartilhamento cancelado') }
@@ -293,6 +332,7 @@ export default function App() {
   async function stopSharing() {
     if (sharingBusy) return
     setSharingBusy(true)
+    window.clearTimeout(screenLimitTimer.current)
     sharingRef.current = false
     try {
       await room.current?.localParticipant.setScreenShareEnabled(false)
@@ -426,9 +466,10 @@ export default function App() {
 
   function resetRoom(message: string) {
     stopMicTest()
+    window.clearTimeout(screenLimitTimer.current)
     room.current = null
     audioElements.current.forEach(element => element.remove()); audioElements.current.clear(); audioTracks.current.clear(); audioOwners.current.clear()
-    sharingRef.current = false; controlToken.current = ''
+    sharingRef.current = false; sessionToken.current = ''; controlToken.current = ''
     setInviteRoom(''); setJoinedRoom(''); setMembers([]); setSharing(false); setPresentations([]); setFocusedScreen(''); setMemberVolumes({}); setMicEnabled(false); setChat([]); setRole('member'); setReconnecting(false); setAudioSettingsOpen(false); setDeafened(false); setStatus(message)
     history.replaceState(null, '', location.pathname)
   }
@@ -454,8 +495,9 @@ export default function App() {
   const qualityLabel = reconnecting ? 'Reconectando' : connectionQuality === 'excellent' ? 'Excelente' : connectionQuality === 'good' ? 'Boa' : connectionQuality === 'poor' ? 'Instável' : connectionQuality === 'lost' ? 'Sem conexão' : 'Conectando'
   const voicePanel = <VoicePanel name={name} quality={qualityLabel} members={members.length} micEnabled={micEnabled} deafened={deafened} settingsOpen={audioSettingsOpen} inputs={audioInputs} outputs={audioOutputs} inputDevice={inputDevice} outputDevice={outputDevice} volume={volume} micLevel={micLevel} micTesting={micTesting} pushToTalk={pushToTalk} onLeave={leaveRoom} onToggleMic={toggleMic} onToggleDeafen={toggleDeafen} onToggleSettings={toggleAudioSettings} onCloseSettings={toggleAudioSettings} onDevice={changeAudioDevice} onVolume={changeVolume} onMicTest={toggleMicTest} onPushToTalk={togglePushToTalk}/>
   return <Suspense fallback={<main className="room room-loading">Preparando a sala…</main>}><main className={`room ${panelOpen?'':'panel-closed'}`}>
-    <header className="room-header"><Logo/><div className="room-title"><span>{locked?'Sala bloqueada':'Sala privada'}</span><strong>{joinedRoom}</strong></div><div className="room-header-actions"><div className={`quality quality-${connectionQuality}`}><Signal/><span>{qualityLabel}</span></div>{role==='owner'&&<button className="header-button" onClick={toggleLock}>{locked?<Unlock/>:<Lock/>}{locked?'Desbloquear':'Bloquear'}</button>}<button className="header-button" onClick={copyLink}><Link2/>{copied?'Link copiado':'Convidar'}</button><button className="header-button panel-toggle" onClick={()=>setPanelOpen(v=>!v)}>{panelOpen?<PanelRightClose/>:<PanelRightOpen/>}</button></div></header>
+    <header className="room-header"><Logo/><div className="room-title"><span>{locked?'Sala bloqueada':'Sala privada'}</span><strong>{joinedRoom}</strong></div><div className="room-header-actions"><div className="usage-estimate" title="Estimativa desta sessão no LiveKit"><span>{Math.ceil(usageSeconds/60)}</span> min-part.</div><div className={`quality quality-${connectionQuality}`}><Signal/><span>{qualityLabel}</span></div>{role==='owner'&&<button className="header-button" onClick={toggleLock}>{locked?<Unlock/>:<Lock/>}{locked?'Desbloquear':'Bloquear'}</button>}<button className="header-button" onClick={copyLink}><Link2/>{copied?'Link copiado':'Convidar'}</button><button className="header-button panel-toggle" onClick={()=>setPanelOpen(v=>!v)}>{panelOpen?<PanelRightClose/>:<PanelRightOpen/>}</button></div></header>
     {reconnecting&&<div className="reconnect-banner"><span className="reconnect-spinner"/> Reconectando automaticamente…</div>}
+    {idleWarning&&<div className="idle-warning"><div><strong>Você ainda está aí?</strong><span>{role==='owner'&&members.length>1?'Interaja para manter sua conexão econômica.':'A chamada será encerrada após 30 minutos sem interação.'}</span></div><button onClick={()=>{lastActivity.current=Date.now();setIdleWarning(false)}}>Continuar conectado</button><button onClick={leaveRoom}>Sair agora</button></div>}
     <div className="room-body"><section className={`stage ${presentations.length?'multi-stage':''} ${focusedScreen?'focus-mode':''}`} ref={stage} onClick={()=>audioBlocked&&enableAudio()}><div ref={audioRoot} className="audio-root"/>{presentations.length===0&&<div className="empty-stage"><div className="empty-visual"><MonitorUp/></div><span>SALA PRONTA</span><h2>Compartilhe quando quiser</h2><p>Todos podem compartilhar telas ao mesmo tempo.</p><button className="main-button" disabled={sharingBusy} onClick={startSharing}><MonitorUp/> {sharingBusy?'Abrindo seletor…':'Compartilhar minha tela'}</button><label className="quality-select">Qualidade<select disabled={sharingBusy} value={qualityPreset} onChange={e=>setQualityPreset(e.target.value as QualityPreset)}>{Object.entries(qualitySettings).map(([key,value])=><option key={key} value={key}>{value.label}</option>)}</select></label></div>}{presentations.map(item=><ScreenTile key={item.id} presentation={item} focused={focusedScreen===item.id} onFocus={()=>setFocusedScreen(current=>current===item.id?'':item.id)}/>)}{audioBlocked&&<button className="audio-overlay" onClick={enableAudio}><Volume2/> Clique para ativar o áudio</button>}</section>
       <RoomSidebar tab={panelTab} onTabChange={setPanelTab} members={members} speakers={speakers} presentingIds={presentingIds} role={role} memberVolumes={memberVolumes} onMemberVolume={changeMemberVolume} onToggleMemberAudio={toggleMemberAudio} onModerate={moderate} chat={chat} chatText={chatText} onChatText={setChatText} sending={sending} onSend={sendChat} locked={locked}/></div>
     <footer className="room-footer">{voicePanel}<div className="control-dock"><button className={`mobile-voice-control ${micEnabled?'enabled-control':''}`} onClick={toggleMic}>{micEnabled?<Mic/>:<MicOff/>}<span>{micEnabled?'Microfone':'Mudo'}</span></button><button className={`mobile-voice-control ${deafened?'danger-control':''}`} onClick={toggleDeafen}>{deafened?<VolumeX/>:<Headphones/>}<span>{deafened?'Sem som':'Áudio'}</span></button><button onClick={copyLink}>{copied?<Check/>:<Copy/>}<span>{copied?'Copiado':'Convite'}</span></button>{!sharing&&<button className="primary-control" disabled={sharingBusy} onClick={startSharing}><MonitorUp/><span>{sharingBusy?'Aguarde':'Compartilhar'}</span></button>}{sharing&&<button className="danger-control" disabled={sharingBusy} onClick={stopSharing}><MonitorOff/><span>{sharingBusy?'Parando':'Parar'}</span></button>}<button onClick={toggleFullscreen}><Expand/><span>Tela cheia</span></button><button className="mobile-panel-control" onClick={()=>setPanelOpen(v=>!v)}><Users/><span>Pessoas</span></button><button className="mobile-settings-control" onClick={toggleAudioSettings}><Settings/><span>Voz</span></button><button className="leave-control" onClick={leaveRoom}><LogOut/><span>{role==='owner'?'Encerrar':'Sair'}</span></button></div><div className="footer-count"><span className={presentations.length?'status active':'status'}/><span>{status}</span></div></footer>
