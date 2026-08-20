@@ -10,6 +10,7 @@ Sala privada de voz, chat e compartilhamento de tela no navegador.
 - Uma apresentação por vez, coordenada pelo backend.
 - Voz com indicador de quem está falando.
 - Chat em tempo real durante a sessão.
+- Compartilhamento simultâneo de tela por vários participantes em uma grade responsiva.
 - Compartilhamento de tela com áudio e três perfis de qualidade.
 - Reconexão automática e indicador de qualidade.
 - Histórico local das cinco salas recentes.
@@ -20,6 +21,12 @@ Sala privada de voz, chat e compartilhamento de tela no navegador.
 2. Copie `.env.example` para `.env` e preencha as credenciais.
 3. Execute `npm run dev`.
 4. Abra `http://localhost:5173`.
+
+## Validação
+
+- `npm test` executa os testes de segurança e validação.
+- `npm run build` valida o TypeScript e gera o bundle de produção.
+- `npm ci` instala exatamente as versões registradas no lockfile.
 
 ## Publicação na Vercel
 
