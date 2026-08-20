@@ -243,7 +243,17 @@ export default function App() {
     nextRoom.on(RoomEvent.Disconnected, () => {
       if (room.current === nextRoom) resetRoom('A sala foi encerrada')
     })
-    await nextRoom.connect(credentials.server_url, credentials.participant_token)
+    try {
+      await nextRoom.connect(credentials.server_url, credentials.participant_token)
+    } catch (error) {
+      nextRoom.disconnect()
+      if (room.current === nextRoom) room.current = null
+      const detail = error instanceof Error ? error.message.toLowerCase() : ''
+      if (detail.includes('signal connection') || detail.includes('websocket')) {
+        throw new Error('Não foi possível conectar ao LiveKit. Verifique a LIVEKIT_URL e se o servidor está acessível.')
+      }
+      throw error
+    }
     if (inputDevice !== 'default') await nextRoom.switchActiveDevice('audioinput', inputDevice).catch(() => false)
     if (outputDevice !== 'default') await nextRoom.switchActiveDevice('audiooutput', outputDevice).catch(() => false)
     try { const metadata = JSON.parse(nextRoom.metadata || '{}'); setLocked(Boolean(metadata.locked)) } catch { /* sala nova */ }

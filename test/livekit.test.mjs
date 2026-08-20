@@ -5,7 +5,14 @@ process.env.LIVEKIT_API_KEY = 'test-key'
 process.env.LIVEKIT_API_SECRET = 'test-secret-with-enough-entropy'
 process.env.LIVEKIT_URL = 'wss://example.livekit.cloud'
 
-const { cleanName, makeRoomCode, readBody, signSession, verifyRoomCode, verifySession } = await import('../lib/livekit.mjs')
+const { cleanName, makeRoomCode, normalizeLiveKitUrl, readBody, signSession, verifyRoomCode, verifySession } = await import('../lib/livekit.mjs')
+
+test('URL do LiveKit é normalizada para WebSocket', () => {
+  assert.equal(normalizeLiveKitUrl('https://example.livekit.cloud/'), 'wss://example.livekit.cloud')
+  assert.equal(normalizeLiveKitUrl('http://localhost:7880'), 'ws://localhost:7880')
+  assert.equal(normalizeLiveKitUrl('wss://example.livekit.cloud'), 'wss://example.livekit.cloud')
+  assert.throws(() => normalizeLiveKitUrl('example.livekit.cloud'), { message: 'CONFIG_INVALID_URL' })
+})
 
 test('código de sala assinado é aceito e adulteração é rejeitada', () => {
   const code = makeRoomCode()

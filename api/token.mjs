@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     if (state.locked) return send(res, 423, { error: 'Esta sala foi bloqueada pelo responsável' })
     return send(res, 201, await participantCredentials({ room, name }))
   } catch (error) {
-    const message = error?.message === 'CONFIG_MISSING' ? 'LiveKit não configurado' : error?.message === 'INVALID_JSON' ? 'Dados da solicitação inválidos' : 'Não foi possível entrar na sala'
+    const message = error?.message === 'CONFIG_MISSING' ? 'LiveKit não configurado' : error?.message === 'CONFIG_INVALID_URL' ? 'A URL do LiveKit está inválida' : error?.message === 'INVALID_JSON' ? 'Dados da solicitação inválidos' : 'Não foi possível entrar na sala'
     return send(res, errorStatus(error), { error: message })
   }
 }
