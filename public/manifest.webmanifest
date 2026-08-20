@@ -1,0 +1,10 @@
+{
+  "name": "Screenly",
+  "short_name": "Screenly",
+  "description": "Voz, chat e compartilhamento de tela em tempo real.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07110f",
+  "theme_color": "#07110f",
+  "icons": [{ "src": "/screenly-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

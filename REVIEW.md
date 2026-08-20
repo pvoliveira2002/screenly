@@ -18,6 +18,11 @@
 - O botão do dono informa que irá **Encerrar** a sala.
 - Um painel de voz compacto mostra o estado da conexão, o usuário atual e controles rápidos de microfone e áudio.
 - Configurações de voz permitem escolher entrada, saída e volume; as preferências ficam salvas no navegador.
+- Cada participante remoto possui volume e silenciamento locais independentes.
+- O painel inclui teste de microfone, medidor de entrada, push-to-talk e atalhos de teclado.
+- A grade permite destacar ou ampliar uma apresentação específica.
+- O Screenly pode ser instalado como PWA e possui uma experiência básica offline para a interface.
+- O LiveKit e componentes da sala são carregados sob demanda, reduzindo o bundle inicial.
 
 ## Compartilhamento de tela e áudio
 

@@ -10,8 +10,12 @@ Sala privada de voz, chat e compartilhamento de tela no navegador.
 - Uma apresentação por vez, coordenada pelo backend.
 - Voz com indicador de quem está falando.
 - Painel de voz com microfone, silenciamento, volume e seleção de dispositivos de entrada e saída.
+- Volume e silenciamento local por participante.
+- Teste de microfone com medidor, push-to-talk e atalhos de teclado.
 - Chat em tempo real durante a sessão.
 - Compartilhamento simultâneo de tela por vários participantes em uma grade responsiva.
+- Destaque e tela cheia individual para cada apresentação.
+- PWA instalável e LiveKit carregado somente ao entrar em uma sala.
 - Compartilhamento de tela com áudio e três perfis de qualidade.
 - Reconexão automática e indicador de qualidade.
 - Histórico local das cinco salas recentes.
