@@ -1,0 +1,21 @@
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react'
+import { Check, Clock3, Search, UserMinus, UserPlus, Users } from 'lucide-react'
+
+type SocialUser={id:string;email:string;displayName:string;avatar:string;online:boolean}
+type SocialState={friends:SocialUser[];incoming:SocialUser[];outgoing:SocialUser[];profile:SocialUser}
+
+export default function FriendsPanel(){
+  const [data,setData]=useState<SocialState|null>(null),[email,setEmail]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
+  const load=async()=>{const response=await fetch('/api/social');if(response.ok)setData(await response.json())}
+  useEffect(()=>{load();const timer=window.setInterval(()=>post('heartbeat'),30000);return()=>window.clearInterval(timer)},[])
+  async function post(action:string,value:Record<string,string>={}){const response=await fetch('/api/social',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...value})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Não foi possível concluir');setData(result)}
+  async function add(event:FormEvent){event.preventDefault();setBusy(true);setError('');try{await post('request',{email});setEmail('')}catch(reason){setError(reason instanceof Error?reason.message:'Não foi possível adicionar')}finally{setBusy(false)}}
+  async function avatar(event:ChangeEvent<HTMLInputElement>){const file=event.target.files?.[0];if(!file)return;if(file.size>1_000_000){setError('Escolha uma imagem de até 1 MB');return}const reader=new FileReader();reader.onload=()=>post('avatar',{avatar:String(reader.result)}).catch(reason=>setError(reason.message));reader.readAsDataURL(file)}
+  const Avatar=({user}:{user:SocialUser})=><div className="friend-avatar">{user.avatar?<img src={user.avatar} alt=""/>:user.displayName.charAt(0).toUpperCase()}<i className={user.online?'online':''}/></div>
+  return <section className="friends-page"><header><div><span>COMUNIDADE</span><h1>Amigos</h1><p>Encontre pessoas pela conta do Screenly e acompanhe quem está online.</p></div><label className="profile-photo"><Avatar user={data?.profile||{id:'',email:'',displayName:'Você',avatar:'',online:true}}/><span>Alterar foto<input type="file" accept="image/png,image/jpeg,image/webp" onChange={avatar}/></span></label></header>
+    <form className="friend-search" onSubmit={add}><Search/><input type="email" required placeholder="Adicionar amigo pelo e-mail" value={email} onChange={event=>setEmail(event.target.value)}/><button disabled={busy||!email.trim()}><UserPlus/>{busy?'Enviando…':'Enviar pedido'}</button></form>{error&&<div className="friends-error">{error}</div>}
+    {data?.incoming.length?<div className="friend-section"><h2>Pedidos recebidos <b>{data.incoming.length}</b></h2>{data.incoming.map(user=><article key={user.id}><Avatar user={user}/><div><strong>{user.displayName}</strong><small>{user.email}</small></div><button title="Aceitar pedido" onClick={()=>post('accept',{userId:user.id})}><Check/></button><button title="Recusar pedido" onClick={()=>post('remove',{userId:user.id})}><UserMinus/></button></article>)}</div>:null}
+    <div className="friend-section"><h2><Users/> Todos os amigos <b>{data?.friends.length||0}</b></h2>{data?.friends.length?data.friends.map(user=><article key={user.id}><Avatar user={user}/><div><strong>{user.displayName}</strong><small>{user.online?'Online':`Visto recentemente · ${user.email}`}</small></div><span className={user.online?'friend-status online':'friend-status'}>{user.online?'Online':'Offline'}</span><button title="Remover amigo" onClick={()=>post('remove',{userId:user.id})}><UserMinus/></button></article>):<div className="friends-empty"><Users/><strong>Sua lista começa aqui</strong><span>Adicione alguém usando o e-mail da conta.</span></div>}</div>
+    {data?.outgoing.length?<div className="friend-section"><h2><Clock3/> Pedidos enviados <b>{data.outgoing.length}</b></h2>{data.outgoing.map(user=><article key={user.id}><Avatar user={user}/><div><strong>{user.displayName}</strong><small>Aguardando resposta</small></div><button title="Cancelar pedido" onClick={()=>post('remove',{userId:user.id})}><UserMinus/></button></article>)}</div>:null}
+  </section>
+}

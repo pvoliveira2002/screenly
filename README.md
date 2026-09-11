@@ -51,4 +51,6 @@ O `LIVEKIT_API_SECRET` é usado somente nas Functions e nunca deve receber prefi
 
 ## Persistência
 
-Salas recentes ficam no `localStorage` do navegador. Para sincronizar espaços, histórico de chat e preferências entre dispositivos será necessário conectar um banco de dados em uma próxima etapa.
+Contas, sessões, perfis, servidores, canais e mensagens são armazenados localmente em SQLite. Por padrão, o banco fica em `screenly-data/screenly.db`; use `SCREENLY_DATA_DIR` para escolher outro diretório. A pasta de dados não entra no Git e deve fazer parte da rotina de backup do servidor.
+
+As senhas são derivadas com `scrypt` e salt individual. A sessão permanece por 30 dias em um cookie `HttpOnly` e `SameSite=Lax`. Preferências do dispositivo, como microfone e saída de áudio, continuam no navegador porque pertencem à máquina usada.

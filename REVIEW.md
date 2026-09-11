@@ -26,6 +26,8 @@
 - O modo econômico usa 540p/20 FPS por padrão, miniaturas 270p/12 FPS e até três telas simultâneas.
 - Salas vazias expiram em 60 segundos, chamadas inativas recebem aviso e apresentações individuais param após 60 minutos.
 - A interface mostra uma estimativa local de minutos-participante usados na sessão atual.
+- Mensagens recebidas são validadas antes de aparecer no chat.
+- Canais de voz locais reaproveitam a sala enquanto ela existir e renovam o código quando ela expirar.
 
 ## Compartilhamento de tela e áudio
 

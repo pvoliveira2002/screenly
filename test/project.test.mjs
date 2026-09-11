@@ -28,12 +28,20 @@ test('dependências diretas usam versões reproduzíveis', async () => {
   }
 })
 
-test('modo econômico mantém limites de consumo no código', async () => {
+test('compartilhamento automático usa alta qualidade e mantém limites da sala', async () => {
   const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
   const constants = await readFile(new URL('../src/constants.ts', import.meta.url), 'utf8')
   const roomApi = await readFile(new URL('../api/room.mjs', import.meta.url), 'utf8')
-  assert.match(app, /useState<QualityPreset>\('economy'\)/)
+  assert.match(app, /width: 1920, height: 1080, frameRate: 60/)
+  assert.doesNotMatch(app, /className="quality-select"/)
   assert.match(constants, /MAX_SIMULTANEOUS_SCREENS = 3/)
   assert.match(roomApi, /emptyTimeout: 60/)
   assert.match(roomApi, /maxParticipants: 10/)
+})
+
+test('mensagens recebidas são validadas antes de entrar no chat', async () => {
+  const app = await readFile(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  assert.match(app, /parseChatMessage\(JSON\.parse/)
+  assert.match(app, /typeof message\.text !== 'string'/)
+  assert.match(app, /local: false/)
 })

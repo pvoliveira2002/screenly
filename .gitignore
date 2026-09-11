@@ -5,6 +5,7 @@ dist
 .vercel
 *.log
 *.tsbuildinfo
+screenly-data/
 
 .vercel
 .env*

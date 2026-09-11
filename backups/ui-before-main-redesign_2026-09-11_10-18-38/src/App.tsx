@@ -11,7 +11,6 @@ const RoomSidebar = lazy(() => import('./components/RoomSidebar'))
 const VoicePanel = lazy(() => import('./components/VoicePanel'))
 const CommunityHub = lazy(() => import('./components/CommunityHub'))
 const AuthScreen = lazy(() => import('./components/AuthScreen'))
-const FriendsPanel = lazy(() => import('./components/FriendsPanel'))
 
 export default function App() {
   const initialRoom = new URLSearchParams(location.search).get('sala')?.toUpperCase() || ''
@@ -86,11 +85,6 @@ export default function App() {
       applyAccount(await response.json())
     }).finally(() => setAccountLoading(false))
   }, [])
-  useEffect(() => {
-    if(!accountUser)return
-    const refresh=()=>fetch('/api/messages').then(async response=>{if(response.ok){const data=await response.json();setAccountMessages(data.messages||[])}}).catch(()=>{})
-    refresh();const timer=window.setInterval(refresh,2500);return()=>window.clearInterval(timer)
-  },[accountUser?.id])
   useEffect(() => {
     if (!joinedRoom) return
     const active = () => { lastActivity.current = Date.now(); setIdleWarning(false) }
@@ -225,33 +219,11 @@ export default function App() {
   }
 
   function applyAccount(payload: { user: AccountUser; state: AccountState }) {
-    const legacyServers = Array.isArray(payload.state.servers) ? payload.state.servers as CommunityServer[] : []
-    const servers = legacyServers.length ? legacyServers : loadCommunityServers()
+    const servers = Array.isArray(payload.state.servers) && payload.state.servers.length ? payload.state.servers as CommunityServer[] : loadCommunityServers()
     setAccountUser(payload.user); setName(payload.user.displayName); setCommunityServers(servers)
     setAccountMessages(Array.isArray(payload.state.messages) ? payload.state.messages as CommunityMessage[] : [])
-    setAccountProfile(payload.state.profile && Object.keys(payload.state.profile).length ? { ...(payload.state.profile as unknown as CommunityProfile), avatar:payload.user.avatar||(payload.state.profile.avatar as string)||'' } : { displayName: payload.user.displayName, status: 'online', about: '', avatar:payload.user.avatar||'' })
-    void loadSharedServers(legacyServers, Array.isArray(payload.state.messages)?payload.state.messages as CommunityMessage[]:[])
-  }
-
-  async function loadSharedServers(legacyServers: CommunityServer[], legacyMessages: CommunityMessage[]) {
-    try {
-      let response = await fetch('/api/community')
-      let data = await response.json()
-      if (!response.ok) throw new Error(data.error)
-      if (!data.servers.length && legacyServers.length) {
-        response = await fetch('/api/community', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'sync', servers:legacyServers }) })
-        data = await response.json(); if(!response.ok)throw new Error(data.error)
-      }
-      const inviteCode = new URLSearchParams(location.search).get('convite')
-      if (inviteCode) {
-        response = await fetch('/api/community', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'join', code:inviteCode }) })
-        data = await response.json(); if(!response.ok)throw new Error(data.error)
-        history.replaceState({}, '', location.pathname)
-      }
-      setCommunityServers(data.servers)
-      saveCommunityServers(data.servers)
-      if(legacyMessages.length){const imported=await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'import',messages:legacyMessages})});if(imported.ok){const result=await imported.json();setAccountMessages(result.messages||[])}}
-    } catch(error) { setStatus(error instanceof Error ? error.message : 'Não foi possível carregar seus servidores') }
+    setAccountProfile(payload.state.profile && Object.keys(payload.state.profile).length ? payload.state.profile as unknown as CommunityProfile : { displayName: payload.user.displayName, status: 'online', about: '' })
+    if (!payload.state.servers.length) persistAccountState({ servers })
   }
 
   async function persistAccountState(value: { servers?: CommunityServer[]; messages?: CommunityMessage[]; profile?: CommunityProfile }) {
@@ -268,22 +240,10 @@ export default function App() {
   }
 
   function changeCommunityServers(servers: CommunityServer[]) {
-    const deleted = communityServers.find(server => !servers.some(item => item.id === server.id))
     setCommunityServers(servers)
     saveCommunityServers(servers)
-    if (deleted) fetch('/api/community', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'delete',serverId:deleted.id}) }).catch(() => {})
-    else fetch('/api/community', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'sync',servers:servers.filter(server=>server.currentRole!=='member')}) }).then(async response=>{const data=await response.json();if(!response.ok)throw new Error(data.error);setCommunityServers(data.servers);saveCommunityServers(data.servers)}).catch(error=>setStatus(error instanceof Error?error.message:'Não foi possível salvar o servidor'))
+    persistAccountState({ servers })
   }
-
-  async function createCommunityInvite(serverId: string) {
-    const response=await fetch('/api/community',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'invite',serverId})})
-    const data=await response.json(); if(!response.ok)throw new Error(data.error||'Não foi possível criar o convite')
-    return `${location.origin}${location.pathname}?convite=${encodeURIComponent(data.code)}`
-  }
-  async function communityMessageAction(action:string,value:Record<string,unknown>){
-    const response=await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...value})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Não foi possível atualizar a mensagem');setAccountMessages(data.messages||[])
-  }
-  async function saveAccountProfile(profile:CommunityProfile){const response=await fetch('/api/account/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(profile)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Não foi possível salvar o perfil');setAccountUser(data.user);setName(data.user.displayName);setAccountProfile(data.state.profile);setCommunityServers(current=>current.map(server=>({...server,members:server.members?.map(member=>member.id===data.user.id?{...member,displayName:data.user.displayName,avatar:data.user.avatar}:member)})))}
 
   function saveCommunityRoom(serverId: string, channelId: string, roomCode: string) {
     const next = communityServers.map(server => server.id !== serverId ? server : ({ ...server, categories: server.categories.map(category => ({ ...category, channels: category.channels.map(channel => channel.id === channelId ? { ...channel, roomCode } : channel) })) }))
@@ -609,7 +569,7 @@ export default function App() {
     <footer className="room-footer">{voicePanel}<div className="control-dock"><button className={`mobile-voice-control ${micEnabled?'enabled-control':''}`} onClick={toggleMic}>{micEnabled?<Mic/>:<MicOff/>}<span>{micEnabled?'Microfone':'Mudo'}</span></button><button className={`mobile-voice-control ${deafened?'danger-control':''}`} onClick={toggleDeafen}>{deafened?<VolumeX/>:<Headphones/>}<span>{deafened?'Sem som':'Áudio'}</span></button><button onClick={copyLink}>{copied?<Check/>:<Copy/>}<span>{copied?'Copiado':'Convite'}</span></button>{!sharing&&<button className="primary-control" disabled={sharingBusy} onClick={startSharing}><MonitorUp/><span>{sharingBusy?'Aguarde':'Compartilhar'}</span></button>}{sharing&&<button className="danger-control" disabled={sharingBusy} onClick={stopSharing}><MonitorOff/><span>{sharingBusy?'Parando':'Parar'}</span></button>}<button onClick={toggleFullscreen}><Expand/><span>Tela cheia</span></button><button className="mobile-panel-control" onClick={()=>setPanelOpen(v=>!v)}><Users/><span>Pessoas</span></button><button className="mobile-settings-control" onClick={toggleAudioSettings}><Settings/><span>Voz</span></button><button className="leave-control" onClick={leaveRoom}><LogOut/><span>{role==='owner'?'Encerrar':'Sair'}</span></button></div><div className="footer-count"><span className={presentations.length?'status active':'status'}/><span>{status}</span></div></footer>
   </main></Suspense> : undefined
 
-  return <Suspense fallback={<main className="room room-loading">Abrindo seus servidores…</main>}><CommunityHub key={accountUser.id} name={name} servers={communityServers} initialMessages={accountMessages} initialProfile={accountProfile} onPersist={persistAccountState} onSaveProfile={saveAccountProfile} onMessageAction={communityMessageAction} onLogout={logoutAccount} onChange={changeCommunityServers} onInvite={createCommunityInvite} onJoinVoice={joinCommunityVoice} activeVoiceServerId={activeVoiceContext?.serverId} activeVoiceChannelId={activeVoiceContext?.channelId} voiceMembers={members} voiceView={voiceView} voicePanel={joinedRoom ? voicePanel : undefined} friendsView={<FriendsPanel/>}/></Suspense>
+  return <Suspense fallback={<main className="room room-loading">Abrindo seus servidores…</main>}><CommunityHub key={accountUser.id} name={name} servers={communityServers} initialMessages={accountMessages} initialProfile={accountProfile} onPersist={persistAccountState} onLogout={logoutAccount} onChange={changeCommunityServers} onJoinVoice={joinCommunityVoice} activeVoiceServerId={activeVoiceContext?.serverId} activeVoiceChannelId={activeVoiceContext?.channelId} voiceMembers={members} voiceView={voiceView} voicePanel={joinedRoom ? voicePanel : undefined}/></Suspense>
 }
 
 function Logo(){return <div className="logo"><span>S</span><strong>Screenly</strong></div>}

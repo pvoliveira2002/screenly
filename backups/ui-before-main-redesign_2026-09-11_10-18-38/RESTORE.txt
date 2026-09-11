@@ -1,0 +1,3 @@
+﻿Backup da interface antes do redesign principal.
+Criado em: 2026-09-11 10:18:38
+Para restaurar, copie o conteúdo da pasta src deste backup sobre a pasta src do projeto.
