@@ -3,7 +3,7 @@
 .server-rail{padding-top:5px;background:linear-gradient(180deg,#030806,#050c09);border-right:1px solid #ffffff08}
 .server-icon,.server-home{position:relative;transition:transform .2s cubic-bezier(.2,.8,.2,1),border-radius .2s,background .2s,color .2s,box-shadow .2s}
 .server-home{width:42px!important;height:42px!important;flex-basis:42px!important;margin:0 0 8px;background:transparent!important;border:0!important;border-radius:12px!important;box-shadow:0 8px 24px #0005}
-.server-home img{display:block;width:42px;height:42px;border-radius:11px;object-fit:contain;object-position:center;transform:translateZ(0);transition:filter .2s,box-shadow .2s}
+.server-home img{display:block;width:42px;height:42px;border-radius:11px;object-fit:cover;object-position:center;transform:translateZ(0);transition:filter .2s,box-shadow .2s}
 .server-home:hover{background:transparent!important;transform:translateY(-1px)!important;box-shadow:none}.server-home:hover img{filter:brightness(1.12);box-shadow:0 0 22px #58e8b126}
 .server-rail>.rail-separator{width:38px;margin-bottom:3px;background:linear-gradient(90deg,transparent,#58e8b13d,transparent)}
 .server-icon:hover,.server-home:hover{transform:translateY(-2px) scale(1.04)}
