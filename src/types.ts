@@ -10,5 +10,6 @@ export type CommunityCategory = { id: string; name: string; channels: CommunityC
 export type CommunityRole = { id: string; name: string; color: string; permissions: string[] }
 export type CommunityServerMember = { id: string; displayName: string; avatar?: string; role: 'owner' | 'member'; online: boolean }
 export type CommunityServer = { id: string; name: string; description: string; categories: CommunityCategory[]; icon?: string; roles?: CommunityRole[]; ownerId?: string; currentRole?: 'owner' | 'member'; members?: CommunityServerMember[] }
-export type CommunityMessage = { id: string; channelId: string; authorId?: string; author: string; avatar?: string; text: string; time: number; edited?: boolean; replyTo?: string; reactions?: Record<string, number>; pinned?: boolean }
+export type CommunityAttachment = { id:string; name:string; type:string; size:number; url:string }
+export type CommunityMessage = { id: string; channelId: string; authorId?: string; author: string; avatar?: string; text: string; time: number; edited?: boolean; replyTo?: string; reactions?: Record<string, number>; pinned?: boolean; attachments?:CommunityAttachment[] }
 export type CommunityProfile = { displayName: string; status: 'online' | 'idle' | 'busy' | 'offline'; about: string; avatar?: string }

@@ -8,6 +8,7 @@ import accountHandler from './api/account.mjs'
 import socialHandler from './api/social.mjs'
 import communityHandler from './api/community.mjs'
 import messagesHandler from './api/messages.mjs'
+import { downloadHandler, uploadHandler } from './api/files.mjs'
 
 const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' })
 const server = createServer((req, res) => {
@@ -19,6 +20,8 @@ const server = createServer((req, res) => {
   if (req.url === '/api/social') return socialHandler(req, res)
   if (req.url === '/api/community') return communityHandler(req, res)
   if (req.url === '/api/messages') return messagesHandler(req, res)
+  if (req.url === '/api/upload' && req.method === 'POST') return uploadHandler(req,res)
+  if (req.url?.startsWith('/api/files/') && req.method === 'GET') return downloadHandler(req,res)
   vite.middlewares(req, res, () => {})
 })
 
