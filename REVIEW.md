@@ -1,58 +1,55 @@
-# Revisão técnica do Screenly
+# Review de QA — tela principal
 
-## Correções aplicadas
+Data: 14/09/2026
 
-- O `package-lock.json` corrompido foi removido e reconstruído pelo npm.
-- As dependências diretas deixaram de usar `latest` e agora têm versões exatas para instalações reproduzíveis.
-- A entrada exige que a sala ainda exista no LiveKit. Um convite assinado antigo não recria uma sala encerrada.
-- Ao sair, o dono encerra a sala no LiveKit; os demais participantes apenas deixam a chamada.
-- A autorização de moderação também confirma que a sala existe e que o token pertence ao dono registrado nos metadados.
-- JSON inválido, corpo excessivo e tipo de conteúdo incorreto recebem respostas controladas.
-- Respostas das APIs sensíveis não são armazenadas em cache e usam `nosniff`.
-- Tokens de sessão malformados deixam de causar exceções no servidor.
-- Nomes são normalizados e têm caracteres de controle removidos.
-- Chamadas da interface têm timeout e mensagens de falha de rede mais claras.
-- Botões e campos são bloqueados durante criação, entrada, envio de mensagem e início/fim da apresentação.
-- O chat acompanha mensagens novas automaticamente.
-- Campos em celulares usam tamanho e dicas de teclado apropriados, evitando zoom involuntário no iOS.
-- O botão do dono informa que irá **Encerrar** a sala.
-- Um painel de voz compacto mostra o estado da conexão, o usuário atual e controles rápidos de microfone e áudio.
-- Configurações de voz permitem escolher entrada, saída e volume; as preferências ficam salvas no navegador.
-- Cada participante remoto possui volume e silenciamento locais independentes.
-- O painel inclui teste de microfone, medidor de entrada, push-to-talk e atalhos de teclado.
-- A grade permite destacar ou ampliar uma apresentação específica.
-- O Screenly pode ser instalado como PWA e possui uma experiência básica offline para a interface.
-- O LiveKit e componentes da sala são carregados sob demanda, reduzindo o bundle inicial.
-- O modo econômico usa 540p/20 FPS por padrão, miniaturas 270p/12 FPS e até três telas simultâneas.
-- Salas vazias expiram em 60 segundos, chamadas inativas recebem aviso e apresentações individuais param após 60 minutos.
-- A interface mostra uma estimativa local de minutos-participante usados na sessão atual.
-- Mensagens recebidas são validadas antes de aparecer no chat.
-- Canais de voz locais reaproveitam a sala enquanto ela existir e renovam o código quando ela expirar.
+## Resultado
 
-## Compartilhamento de tela e áudio
+A tela principal está adequada para um beta fechado. Build concluído e 18 testes automatizados aprovados. O QA cobriu código, banco e APIs; não havia navegador automatizado disponível neste ambiente, então interação visual, câmera, microfone e compartilhamento de tela ainda devem ser conferidos manualmente em dois dispositivos.
 
-O Screenly solicita tela e áudio ao navegador e publica as faixas separadamente pelo LiveKit. A disponibilidade do áudio depende do navegador, do sistema operacional e da superfície escolhida no seletor. Em geral, compartilhar uma aba do navegador oferece a compatibilidade mais previsível. A interface informa quando a apresentação foi iniciada sem áudio.
+| Área | Estado | Observação |
+|---|---|---|
+| Servidores, categorias e canais | Aprovado | Criar, editar, excluir, convite e associação persistem no banco. |
+| Chat | Aprovado | Enviar, responder, editar, excluir, reagir e fixar respeitam autoria/permissão. |
+| Arquivos | Aprovado | Upload autenticado de até 25 MB; imagens têm prévia e arquivos têm download. |
+| Amigos e presença | Aprovado | Solicitação, aceite, remoção, perfil e presença usam persistência e eventos em tempo real. |
+| Perfil | Aprovado | Apelido, avatar, status e descrição persistem. |
+| Voz e tela | Condicional | Integração e controles existem; dependem do LiveKit e das permissões do navegador. |
+| Busca e mensagens fixadas | Aprovado | Busca atua no canal aberto; painel lista mensagens fixadas. |
+| PWA | Aprovado | Manifesto e service worker válidos; APIs não entram no cache. |
+| Celular | Parcial | Em telas estreitas a lista de canais é ocultada e ainda falta um botão para reabri-la. |
 
-Vários participantes podem apresentar simultaneamente. Cada faixa de tela é exibida em uma grade responsiva e pode ser ampliada com dois cliques. Em celulares, as transmissões são empilhadas para preservar a legibilidade. Quanto mais telas estiverem ativas, maior será o consumo de banda e processamento dos participantes e do LiveKit; o vídeo não passa pelas Functions da Vercel.
+## Correções feitas neste QA
 
-## Testes adicionados
+- Os botões de presente e emoji do campo de mensagem agora funcionam.
+- O microfone no rodapé entra no primeiro canal de voz disponível.
+- Editar e excluir mensagens usa o ID da conta, evitando conflito entre apelidos iguais.
+- A ação de fixar aparece somente para quem administra o servidor.
+- O seletor de emoji recebeu estilo integrado ao layout atual.
 
-O comando `npm test` cobre assinatura e adulteração de convites, tipo e integridade de tokens, normalização de nomes, JSON inválido e limite de tamanho das requisições. O build continua sendo validado com `npm run build`.
+## Melhorias recomendadas
 
-## Próximas melhorias recomendadas
+### Prioridade alta
 
-1. Separar o `App.tsx` em componentes, hooks e serviços menores.
-2. Adicionar testes de integração das Functions com um projeto LiveKit de testes.
-3. Adicionar testes de interface e de dois participantes com Playwright.
-4. Implementar rate limiting compartilhado (Redis/Upstash) nas rotas públicas.
-5. Persistir o ciclo de vida da sala em banco para auditoria e revogação imediata independente do LiveKit.
-6. Exibir confirmação antes de o dono encerrar uma sala com participantes.
-7. Tornar a interrupção remota da apresentação uma ação própria com feedback para o apresentador.
-8. Separar o bundle do LiveKit para reduzir o JavaScript inicial.
-9. Adicionar autenticação, servidores, canais e chat persistente para evoluir para uma alternativa ao Discord.
+- Criar navegação móvel para abrir servidores e canais.
+- Aplicar no servidor as permissões de canais privados; hoje o marcador visual não restringe acesso.
+- Adicionar limite de requisições, proteção CSRF, política de sessão e rotina automática de backup antes de expor o app na internet.
+- Fazer um teste real de voz e compartilhamento de tela com duas contas e duas redes.
 
-## Limitações conhecidas
+### Prioridade média
 
-- O chat existe somente durante a sessão atual.
-- O controle de uma apresentação por vez usa metadados do LiveKit; chamadas simultâneas extremas ainda merecem um lock atômico externo.
-- Fechar abruptamente o navegador do dono não executa a ação explícita de encerramento. Nesse caso, a sala é removida conforme os timeouts configurados no LiveKit e o convite passa a ser rejeitado depois disso.
+- Trocar `prompt` e `confirm` de canais/categorias por diálogos do próprio layout.
+- Implementar paginação de mensagens e busca em todo o servidor.
+- Permitir atribuição real dos cargos cadastrados e aplicar suas permissões.
+- Exibir estado de digitação e confirmação de entrega/erro.
+- Enviar arquivos por streaming para reduzir uso de memória no servidor.
+
+### Manutenção
+
+- Dividir `CommunityHub.tsx` e `App.tsx` em componentes menores.
+- Adicionar testes E2E com Playwright para cliques, modais, teclado e responsividade.
+- Melhorar foco, atalhos de teclado e rótulos acessíveis dos diálogos.
+- Separar o LiveKit em mais chunks para eliminar o aviso de bundle acima de 500 kB.
+
+## Veredito
+
+Pode ser usado por um grupo pequeno em ambiente controlado. Antes de acesso público, devem ser resolvidos canais privados, segurança de produção, backups e o teste real do LiveKit.
