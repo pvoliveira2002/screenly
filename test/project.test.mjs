@@ -45,3 +45,5 @@ test('mensagens recebidas são validadas antes de entrar no chat', async () => {
   assert.match(app, /typeof message\.text !== 'string'/)
   assert.match(app, /local: false/)
 })
+
+test('chat usa conexão persistente em vez de polling frequente',async()=>{const app=await readFile(new URL('../src/App.tsx',import.meta.url),'utf8');assert.match(app,/new EventSource\('\/api\/realtime'\)/);assert.doesNotMatch(app,/setInterval\(refresh,2500\)/)})

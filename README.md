@@ -1,56 +1,39 @@
 # Screenly
 
-Sala privada de voz, chat e compartilhamento de tela no navegador.
+Comunidade autohospedada com contas, servidores, canais, chat, arquivos, voz e compartilhamento de tela.
 
 ## Recursos
 
-- Convites com códigos assinados pelo servidor.
-- Identidade UUID separada do nome visível.
-- Criador da sala com controles de bloqueio, remoção e interrupção de apresentação.
-- Uma apresentação por vez, coordenada pelo backend.
-- Voz com indicador de quem está falando.
-- Painel de voz com microfone, silenciamento, volume e seleção de dispositivos de entrada e saída.
-- Volume e silenciamento local por participante.
-- Teste de microfone com medidor, push-to-talk e atalhos de teclado.
-- Chat em tempo real durante a sessão.
-- Compartilhamento simultâneo de tela por vários participantes em uma grade responsiva.
-- Destaque e tela cheia individual para cada apresentação.
-- PWA instalável e LiveKit carregado somente ao entrar em uma sala.
-- Modo econômico com 540p/20 FPS padrão, até três apresentações e estimativa de minutos.
-- Aviso de inatividade, encerramento de salas vazias e limite de duração da apresentação.
-- Compartilhamento de tela com áudio e três perfis de qualidade.
-- Reconexão automática e indicador de qualidade.
-- Histórico local das cinco salas recentes.
+- Contas e sessões persistentes com senhas derivadas por `scrypt`.
+- Servidores compartilhados, membros, cargos, canais e convites com validade.
+- Chat persistente com respostas, edição, reações, mensagens fixadas e moderação.
+- Atualização em tempo real por conexão SSE, sem consultas frequentes ao banco.
+- Envio autenticado de imagens e arquivos de até 25 MB.
+- Amigos, presença, apelido, status e foto de perfil.
+- Voz e compartilhamento de tela pelo LiveKit, carregado sob demanda.
+- Interface inspirada no Discord, PWA e controles de áudio por participante.
 
 ## Desenvolvimento local
 
-1. Crie um projeto no [LiveKit Cloud](https://cloud.livekit.io/).
-2. Copie `.env.example` para `.env` e preencha as credenciais.
+1. Copie `.env.example` para `.env` e preencha as credenciais do LiveKit.
+2. Execute `npm ci`.
 3. Execute `npm run dev`.
 4. Abra `http://localhost:5173`.
 
+## Dados locais
+
+O SQLite fica em `screenly-data/screenly.db` e os anexos em `screenly-data/uploads`. Defina `SCREENLY_DATA_DIR` para mudar a pasta. Todo esse diretório é ignorado pelo Git e deve entrar no backup do servidor.
+
 ## Validação
 
-- `npm test` executa os testes de segurança e validação.
+- `npm test` executa os testes do projeto.
 - `npm run build` valida o TypeScript e gera o bundle de produção.
-- `npm ci` instala exatamente as versões registradas no lockfile.
+- `npm ci` instala as versões registradas no lockfile.
 
-## Publicação na Vercel
+## Publicação
 
-Cadastre estas variáveis em **Settings > Environment Variables**:
-
-- `LIVEKIT_URL`
-- `LIVEKIT_API_KEY`
-- `LIVEKIT_API_SECRET`
-
-Configure-as em Production e, se quiser testar deployments temporários, também em Preview. Depois execute `npx vercel --prod`.
+O backend precisa de um processo Node persistente e acesso a disco. A configuração atual não deve ser publicada como função serverless na Vercel, pois o SQLite e os uploads locais não persistem nesse ambiente. Para uso doméstico, execute o servidor no PC de casa e exponha-o por HTTPS com Cloudflare Tunnel.
 
 ## Segurança
 
-O `LIVEKIT_API_SECRET` é usado somente nas Functions e nunca deve receber prefixo `VITE_`. Convites são validados por HMAC e expiram em 24 horas, requisições têm limite de corpo e tokens de participante expiram em duas horas.
-
-## Persistência
-
-Contas, sessões, perfis, servidores, canais e mensagens são armazenados localmente em SQLite. Por padrão, o banco fica em `screenly-data/screenly.db`; use `SCREENLY_DATA_DIR` para escolher outro diretório. A pasta de dados não entra no Git e deve fazer parte da rotina de backup do servidor.
-
-As senhas são derivadas com `scrypt` e salt individual. A sessão permanece por 30 dias em um cookie `HttpOnly` e `SameSite=Lax`. Preferências do dispositivo, como microfone e saída de áudio, continuam no navegador porque pertencem à máquina usada.
+O `LIVEKIT_API_SECRET` permanece somente no backend e nunca deve usar prefixo `VITE_`. Downloads exigem sessão e participação no servidor, corpos de requisição possuem limites e os tokens do LiveKit expiram.

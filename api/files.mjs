@@ -3,6 +3,7 @@ import { createReadStream, mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { getAttachment, listCommunityMessages, sendAttachmentMessage, sessionUser } from '../lib/database.mjs'
 import { send } from '../lib/livekit.mjs'
+import { publishRealtime } from '../lib/realtime.mjs'
 
 const uploadRoot=resolve(process.env.SCREENLY_DATA_DIR||'screenly-data','uploads')
 mkdirSync(uploadRoot,{recursive:true})
@@ -19,7 +20,7 @@ export async function uploadHandler(req,res){
     const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>25*1024*1024)throw new Error('BODY_TOO_LARGE');chunks.push(chunk)}if(!size)throw new Error('EMPTY_FILE')
     const storageName=crypto.randomUUID(),messageId=crypto.randomUUID();storagePath=resolve(uploadRoot,storageName);writeFileSync(storagePath,Buffer.concat(chunks))
     try{sendAttachmentMessage(user.id,{id:messageId,channelId,text:fileName},{fileName,mimeType,size,storageName})}catch(error){unlinkSync(storagePath);storagePath='';throw error}
-    return send(res,201,{messages:listCommunityMessages(user.id)})
+    publishRealtime('messages',{action:'attachment'});return send(res,201,{messages:listCommunityMessages(user.id)})
   }catch(error){if(storagePath)try{unlinkSync(storagePath)}catch{};if(error?.message==='FORBIDDEN')return send(res,403,{error:'Você não pode enviar arquivos neste canal'});return send(res,error?.message==='BODY_TOO_LARGE'?413:400,{error:error?.message==='EMPTY_FILE'?'O arquivo está vazio':'Não foi possível enviar o arquivo'})}
 }
 

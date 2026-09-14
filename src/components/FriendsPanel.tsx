@@ -7,7 +7,7 @@ type SocialState={friends:SocialUser[];incoming:SocialUser[];outgoing:SocialUser
 export default function FriendsPanel(){
   const [data,setData]=useState<SocialState|null>(null),[email,setEmail]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
   const load=async()=>{const response=await fetch('/api/social');if(response.ok)setData(await response.json())}
-  useEffect(()=>{load();const timer=window.setInterval(()=>post('heartbeat'),30000);return()=>window.clearInterval(timer)},[])
+  useEffect(()=>{load();const timer=window.setInterval(()=>post('heartbeat'),30000),events=new EventSource('/api/realtime');events.addEventListener('social',load);events.addEventListener('presence',load);return()=>{window.clearInterval(timer);events.close()}},[])
   async function post(action:string,value:Record<string,string>={}){const response=await fetch('/api/social',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...value})});const result=await response.json();if(!response.ok)throw new Error(result.error||'Não foi possível concluir');setData(result)}
   async function add(event:FormEvent){event.preventDefault();setBusy(true);setError('');try{await post('request',{email});setEmail('')}catch(reason){setError(reason instanceof Error?reason.message:'Não foi possível adicionar')}finally{setBusy(false)}}
   async function avatar(event:ChangeEvent<HTMLInputElement>){const file=event.target.files?.[0];if(!file)return;if(file.size>1_000_000){setError('Escolha uma imagem de até 1 MB');return}const reader=new FileReader();reader.onload=()=>post('avatar',{avatar:String(reader.result)}).catch(reason=>setError(reason.message));reader.readAsDataURL(file)}

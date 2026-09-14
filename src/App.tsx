@@ -88,8 +88,9 @@ export default function App() {
   }, [])
   useEffect(() => {
     if(!accountUser)return
-    const refresh=()=>fetch('/api/messages').then(async response=>{if(response.ok){const data=await response.json();setAccountMessages(data.messages||[])}}).catch(()=>{})
-    refresh();const timer=window.setInterval(refresh,2500);return()=>window.clearInterval(timer)
+    const refreshMessages=()=>fetch('/api/messages').then(async response=>{if(response.ok){const data=await response.json();setAccountMessages(data.messages||[])}}).catch(()=>{})
+    const refreshCommunity=()=>fetch('/api/community').then(async response=>{if(response.ok){const data=await response.json();setCommunityServers(data.servers||[]);saveCommunityServers(data.servers||[])}}).catch(()=>{})
+    refreshMessages();const events=new EventSource('/api/realtime');events.addEventListener('messages',refreshMessages);events.addEventListener('community',refreshCommunity);events.addEventListener('presence',refreshCommunity);return()=>events.close()
   },[accountUser?.id])
   useEffect(() => {
     if (!joinedRoom) return

@@ -1,6 +1,9 @@
-import { createServerInvite, deleteCommunityServer, joinServerInvite, listCommunityServers, sessionUser, upsertCommunityServer } from '../lib/database.mjs'
+import { createServerInvite, deleteCommunityServer, joinServerInvite, listAttachmentStorageNames, listCommunityServers, sessionUser, upsertCommunityServer } from '../lib/database.mjs'
 import { send } from '../lib/livekit.mjs'
 import crypto from 'node:crypto'
+import { publishRealtime } from '../lib/realtime.mjs'
+import { unlinkSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 const sessionId = req => Object.fromEntries(String(req.headers.cookie || '').split(';').map(value => value.trim().split('=').map(decodeURIComponent)).filter(value => value.length === 2)).screenly_session
 const readBody = async req => { const chunks=[]; let size=0; for await(const chunk of req){size+=chunk.length;if(size>1_000_000)throw new Error('BODY_TOO_LARGE');chunks.push(chunk)} return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') }
@@ -12,6 +15,7 @@ export default async function communityHandler(req,res) {
     if(req.method!=='POST')return send(res,405,{error:'Método não permitido'})
     const body=await readBody(req)
     if(body.action==='sync') {
+      const attachmentsBefore=new Set(listAttachmentStorageNames())
       for(const source of (Array.isArray(body.servers) ? body.servers.slice(0,30) : [])) {
         try { upsertCommunityServer(user.id,source) }
         catch(error) {
@@ -20,11 +24,12 @@ export default async function communityHandler(req,res) {
           upsertCommunityServer(user.id,clone)
         }
       }
-      return send(res,200,{servers:listCommunityServers(user.id)})
+      const attachmentsAfter=new Set(listAttachmentStorageNames());for(const name of attachmentsBefore)if(!attachmentsAfter.has(name))try{unlinkSync(resolve(process.env.SCREENLY_DATA_DIR||'screenly-data','uploads',name))}catch{}
+      publishRealtime('community',{action:'sync'});return send(res,200,{servers:listCommunityServers(user.id)})
     }
-    if(body.action==='delete') { deleteCommunityServer(user.id,String(body.serverId||'')); return send(res,200,{servers:listCommunityServers(user.id)}) }
+    if(body.action==='delete') { const before=new Set(listAttachmentStorageNames());deleteCommunityServer(user.id,String(body.serverId||''));const after=new Set(listAttachmentStorageNames());for(const name of before)if(!after.has(name))try{unlinkSync(resolve(process.env.SCREENLY_DATA_DIR||'screenly-data','uploads',name))}catch{};publishRealtime('community',{action:'delete'}); return send(res,200,{servers:listCommunityServers(user.id)}) }
     if(body.action==='invite') { const invite=createServerInvite(user.id,String(body.serverId||'')); return send(res,201,invite) }
-    if(body.action==='join') { const server=joinServerInvite(user.id,String(body.code||'')); return send(res,200,{server,servers:listCommunityServers(user.id)}) }
+    if(body.action==='join') { const server=joinServerInvite(user.id,String(body.code||''));publishRealtime('community',{action:'join'}); return send(res,200,{server,servers:listCommunityServers(user.id)}) }
     return send(res,400,{error:'Ação inválida'})
   } catch(error) {
     const message=error?.message
